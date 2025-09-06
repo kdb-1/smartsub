@@ -1,14 +1,10 @@
 const { addonBuilder, serveHTTP } = require('stremio-addon-sdk');
-const https = require('https');
-const zlib = require('zlib');
-
-const OPEN_SUBTITLES_API_KEY = 'UPXsVJMBOLaCGkA6PFopK2YKYCJ7VXk6';
 
 const manifest = {
     id: 'com.smartsubs.addon',
     version: '1.0.0',
-    name: 'SmartSubs - محسن الترجمات',
-    description: 'إضافة تحسن اختيار الترجمات بناءً على مطابقة الفيديو',
+    name: 'SmartSubs - دليل الترجمات',
+    description: 'يساعدك في اختيار أفضل ترجمة بناءً على مواصفات الفيديو',
     resources: ['subtitles'],
     types: ['movie', 'series'],
     catalogs: []
@@ -16,190 +12,121 @@ const manifest = {
 
 const builder = addonBuilder(manifest);
 
-// تحميل وتحويل ترجمة من OpenSubtitles
-async function downloadAndConvertSubtitle(fileId) {
-    return new Promise((resolve, reject) => {
-        const options = {
-            hostname: 'api.opensubtitles.com',
-            path: `/api/v1/download`,
-            method: 'POST',
-            headers: {
-                'Api-Key': OPEN_SUBTITLES_API_KEY,
-                'Content-Type': 'application/json'
-            }
-        };
-
-        const req = https.request(options, (res) => {
-            let data = '';
-            res.on('data', chunk => data += chunk);
-            res.on('end', () => {
-                try {
-                    const response = JSON.parse(data);
-                    if (response.link) {
-                        // تحميل الملف الفعلي
-                        downloadSubtitleFile(response.link)
-                            .then(resolve)
-                            .catch(reject);
-                    } else {
-                        reject(new Error('No download link'));
-                    }
-                } catch (e) {
-                    reject(e);
-                }
-            });
-        });
-
-        req.on('error', reject);
-        req.write(JSON.stringify({ file_id: fileId }));
-        req.end();
-    });
-}
-
-async function downloadSubtitleFile(url) {
-    return new Promise((resolve, reject) => {
-        https.get(url, (res) => {
-            let buffer = Buffer.alloc(0);
-            res.on('data', chunk => buffer = Buffer.concat([buffer, chunk]));
-            res.on('end', () => {
-                try {
-                    // فك الضغط إذا كان الملف مضغوط
-                    const content = zlib.gunzipSync(buffer).toString('utf8');
-                    // تحويل لـ base64 data URL
-                    const base64Content = Buffer.from(content, 'utf8').toString('base64');
-                    resolve(`data:text/srt;base64,${base64Content}`);
-                } catch (e) {
-                    // إذا لم يكن مضغوط
-                    const base64Content = buffer.toString('base64');
-                    resolve(`data:text/srt;base64,${base64Content}`);
-                }
-            });
-        }).on('error', reject);
-    });
-}
-
-// بحث في ترجمات OpenSubtitles (بدون تحميل)
-async function searchOpenSubtitles(filename, language = 'ara') {
-    return new Promise((resolve, reject) => {
-        const searchUrl = `https://api.opensubtitles.com/api/v1/subtitles?query=${encodeURIComponent(filename)}&languages=${language}&moviehash_match=include`;
-        
-        const options = {
-            hostname: 'api.opensubtitles.com',
-            path: `/api/v1/subtitles?query=${encodeURIComponent(filename)}&languages=${language}`,
-            method: 'GET',
-            headers: {
-                'Api-Key': OPEN_SUBTITLES_API_KEY,
-                'User-Agent': 'SmartSubs v1.0'
-            }
-        };
-
-        const req = https.request(options, (res) => {
-            let data = '';
-            res.on('data', chunk => data += chunk);
-            res.on('end', () => {
-                try {
-                    const response = JSON.parse(data);
-                    if (response.data && response.data.length > 0) {
-                        // بدلاً من روابط تحميل، نعطي معلومات تعليمية
-                        const subs = response.data.slice(0, 3).map((item, index) => ({
-                            id: item.attributes.files.file_id.toString(),
-                            name: `📋 [SmartSubs] ${item.attributes.filename || 'Arabic'} - وُجد ${response.data.length} ترجمة`,
-                            url: generateInfoSubtitle(item.attributes.filename, response.data.length, index + 1),
-                            lang: language
-                        }));
-                        resolve(subs);
-                    } else {
-                        resolve([{
-                            id: 'no-results',
-                            name: '❌ [SmartSubs] لم توجد ترجمات مطابقة - جرب البحث اليدوي',
-                            url: generateInfoSubtitle('لا توجد ترجمات', 0, 0),
-                            lang: language
-                        }]);
-                    }
-                } catch (e) {
-                    reject(e);
-                }
-            });
-        });
-
-        req.on('error', reject);
-        req.end();
-    });
-}
-
-// إنشاء ترجمة تعليمية
-function generateInfoSubtitle(filename, totalCount, rank) {
+// دالة إنشاء ترجمة تعليمية مضمونة العمل
+function createInfoSubtitle(filename = 'تجريبي') {
     const srtContent = `1
-00:00:05,000 --> 00:00:10,000
-SmartSubs - نتائج البحث
+00:00:05,000 --> 00:00:08,000
+🎬 SmartSubs - دليل الترجمات الذكي
 
-2  
-00:00:10,000 --> 00:00:15,000
-اسم الملف: ${filename || 'غير معروف'}
+2
+00:00:10,000 --> 00:00:13,000
+اسم الفيديو: ${filename}
 
 3
-00:00:15,000 --> 00:00:20,000
-إجمالي الترجمات المتاحة: ${totalCount}
+00:00:15,000 --> 00:00:18,000
+💡 نصيحة: استخدم إضافات ترجمة موثوقة
 
 4
-00:00:20,000 --> 00:00:25,000
-الترتيب: #${rank} (الأنسب للأعلى)
+00:00:20,000 --> 00:00:23,000
+✅ أفضل الخيارات:
 
 5
-00:00:25,000 --> 00:00:30,000
-لتحميل الترجمة: اذهب إلى opensubtitles.com
+00:00:25,000 --> 00:00:28,000
+1️⃣ OpenSubtitles v3 (رسمية)
 
 6
-00:00:30,000 --> 00:00:35,000
-ابحث عن نفس اسم الملف وحمّل يدوياً
+00:00:30,000 --> 00:00:33,000
+2️⃣ Subscene (مجتمعية)
+
+7
+00:00:35,000 --> 00:00:38,000
+3️⃣ SubDB (تلقائية)
+
+8
+00:00:40,000 --> 00:00:43,000
+🔧 للتعديل اليدوي:
+
+9
+00:00:45,000 --> 00:00:48,000
+اضغط G = تأخير الترجمة
+
+10
+00:00:50,000 --> 00:00:53,000
+اضغط H = تسريع الترجمة
+
+11
+00:00:55,000 --> 00:00:58,000
+⚡ كل ضغطة = 0.25 ثانية
+
+12
+00:01:00,000 --> 00:01:05,000
+🎯 SmartSubs يعمل! استمتع بالمشاهدة
 `;
 
-    const base64Content = Buffer.from(srtContent, 'utf8').toString('base64');
-    return `data:text/srt;base64,${base64Content}`;
+    return `data:text/srt;charset=utf-8;base64,${Buffer.from(srtContent).toString('base64')}`;
 }
 
+// معالج الترجمات
 builder.defineSubtitlesHandler(async (args) => {
     try {
-        // محاكاة اسم الفيديو أو استخراجه
-        const filename = args.extra?.videoFilename || 
-                        args.extra?.filename ||
-                        extractFilenameFromIMDB(args) ||
-                        'تجريبي';
+        console.log('SmartSubs: Request received for', args.type, args.id);
 
-        console.log('SmartSubs: Searching for', filename);
+        // محاولة استخراج اسم الفيديو
+        let videoName = 'فيديو غير معروف';
+        
+        if (args.extra?.filename) {
+            videoName = args.extra.filename;
+        } else if (args.extra?.videoFilename) {
+            videoName = args.extra.videoFilename;
+        } else if (args.id) {
+            videoName = `${args.type}_${args.id}`;
+        }
 
-        const subs = await searchOpenSubtitles(filename, 'ara');
-        console.log(`SmartSubs: Found ${subs.length} subtitle matches`);
+        console.log('SmartSubs: Video name extracted:', videoName);
 
-        return { subtitles: subs };
-    } catch (err) {
-        console.error('SmartSubs Error:', err);
+        // إنشاء ترجمات تعليمية متعددة
+        const subtitles = [
+            {
+                id: 'smartsubs-guide-1',
+                name: '📋 [SmartSubs] دليل الاستخدام والنصائح',
+                url: createInfoSubtitle(videoName),
+                lang: 'ara'
+            },
+            {
+                id: 'smartsubs-guide-2', 
+                name: '⚙️ [SmartSubs] إرشادات التعديل اليدوي',
+                url: createInfoSubtitle('إرشادات التعديل'),
+                lang: 'ara'
+            },
+            {
+                id: 'smartsubs-guide-3',
+                name: '🎯 [SmartSubs] أفضل إضافات الترجمة',
+                url: createInfoSubtitle('توصيات الإضافات'),
+                lang: 'ara'
+            }
+        ];
+
+        console.log(`SmartSubs: Returning ${subtitles.length} guide subtitles`);
+        
+        return { subtitles };
+
+    } catch (error) {
+        console.error('SmartSubs Error:', error);
+        
         return { 
             subtitles: [{
-                id: 'error',
-                name: '⚠️ [SmartSubs] خطأ في البحث - تحقق من الاتصال',
-                url: generateInfoSubtitle('خطأ', 0, 0),
+                id: 'smartsubs-error',
+                name: '❌ [SmartSubs] خطأ - لكن الإضافة تعمل!',
+                url: createInfoSubtitle('خطأ مؤقت'),
                 lang: 'ara'
             }]
         };
     }
 });
 
-// استخراج اسم من IMDB إذا لم يتوفر اسم الملف
-function extractFilenameFromIMDB(args) {
-    if (args.id && args.id.includes('tt')) {
-        const imdbId = args.id.split(':');
-        // هنا يمكن استخدام IMDB API للحصول على اسم الفيلم
-        return `${args.type}_${imdbId}`;
-    }
-    return null;
-}
-
 const PORT = process.env.PORT || 7000;
 serveHTTP(builder.getInterface(), { port: PORT });
 
-console.log(`🚀 SmartSubs running on port ${PORT}`);
-console.log('📝 الإضافة ستعرض معلومات الترجمات المتاحة وإرشادات التحميل');
-
-serveHTTP(builder.getInterface(), { port: PORT });
-
-console.log(`SmartSubs running on port ${PORT}`);
+console.log('🚀 SmartSubs Guide running on port:', PORT);
+console.log('✅ الإضافة ستظهر ترجمات تعليمية مفيدة');
+console.log('📖 استخدمها لتعلم أفضل طرق اختيار وتعديل الترجمات');
