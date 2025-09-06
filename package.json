@@ -1,32 +1,23 @@
 {
   "name": "smartsubs-stremio-addon",
-  "version": "1.0.0",
-  "description": "Smart subtitle matching addon for Stremio that auto-selects the best subtitle based on video filename analysis",
+  "version": "1.0.0", 
+  "description": "Smart subtitle matching addon for Stremio",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "dev": "node index.js"
+    "start": "node index.js"
   },
   "engines": {
     "node": ">=18.0.0"
- {
+  },
   "dependencies": {
-    "stremio-addon-sdk": "^1.6.8", 
+    "stremio-addon-sdk": "^1.6.9",
     "express": "^4.18.2"
-  }
-
   },
   "keywords": [
     "stremio",
     "addon",
-    "subtitles",
-    "smart-matching",
-    "video-sync"
+    "subtitles"
   ],
-  "author": "SmartSubs Developer",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/yourusername/smartsubs-addon.git"
-  }
+  "author": "SmartSubs",
+  "license": "MIT"
 }
